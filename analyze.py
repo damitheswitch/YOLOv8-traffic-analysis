@@ -2,7 +2,8 @@
 Post-processing analysis for traffic pipeline results.
 
 Run after the main pipeline finishes. Reads results.csv (pandas + matplotlib only)
-and writes figures plus a text summary under output/.
+and writes figures plus a text summary under output/. Traffic volume uses
+adaptive time bins (10 s through 1 min) from the crossing timestamp span.
 
 Usage:
   python analyze.py
@@ -12,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib
@@ -24,6 +26,88 @@ import pandas as pd
 # Cardinal directions for OD matrix (rows = entry, columns = exit)
 DIRECTION_ORDER = ("North", "South", "East", "West")
 TIME_ANCHOR = pd.Timestamp("2000-01-01 00:00:00")
+
+# Volume timeline figure (replaces legacy vehicles_per_minute.png name).
+TRAFFIC_VOLUME_TIMELINE_FILENAME = "traffic_volume_timeline.png"
+LEGACY_VOLUME_FILENAME = "vehicles_per_minute.png"
+
+# Seconds from first to last crossing timestamp in the CSV; used only to pick bin width.
+_MIN_SPAN_FOR_BIN_RULE = 1.0
+
+# Adaptive histogram bins: [span in seconds) -> pandas offset string
+# <40 -> 10s, <80 -> 15s, <120 -> 20s, <240 -> 30s, else 1min
+
+
+@dataclass(frozen=True)
+class VolumeBinConfig:
+    """Time bucketing for crossing-count timeline and peak summary."""
+
+    pandas_freq: str
+    window_seconds: float
+    human_short: str  # e.g. "15 s" for console / summary
+
+
+def event_timestamp_span_seconds(df: pd.DataFrame) -> float:
+    """Max(timestamp) - min(timestamp) from CSV; 0 if missing or single instant."""
+    if df.empty or "timestamp" not in df.columns:
+        return 0.0
+    ts = pd.to_numeric(df["timestamp"], errors="coerce").dropna()
+    if len(ts) < 2:
+        return 0.0
+    return float(ts.max() - ts.min())
+
+
+def select_volume_bin_config(event_span_seconds: float) -> VolumeBinConfig:
+    """
+    Pick resample frequency from crossing-time span (seconds).
+
+    Tiers: <40 -> 10s; <80 -> 15s; <120 -> 20s; <240 -> 30s; else 1min.
+    """
+    span = max(float(event_span_seconds), _MIN_SPAN_FOR_BIN_RULE)
+    if span < 40:
+        return VolumeBinConfig("10s", 10.0, "10 s")
+    if span < 80:
+        return VolumeBinConfig("15s", 15.0, "15 s")
+    if span < 120:
+        return VolumeBinConfig("20s", 20.0, "20 s")
+    if span < 240:
+        return VolumeBinConfig("30s", 30.0, "30 s")
+    return VolumeBinConfig("1min", 60.0, "1 min")
+
+
+def crossing_counts_volume_timeline(
+    df: pd.DataFrame,
+    *,
+    bin_cfg: VolumeBinConfig | None = None,
+) -> tuple[pd.Series, VolumeBinConfig]:
+    """
+    Resample completed-crossing rows to uniform time bins.
+
+    Requires column ``event_time``. Returns (counts per bin left edge, config used).
+    """
+    if df.empty or "event_time" not in df.columns:
+        raise ValueError("crossing_counts_volume_timeline requires non-empty df with event_time")
+    span = event_timestamp_span_seconds(df)
+    cfg = bin_cfg or select_volume_bin_config(span)
+    counts = (
+        df.set_index("event_time")
+        .sort_index()
+        .resample(cfg.pandas_freq, label="left", closed="left")
+        .size()
+        .rename("vehicles")
+    )
+    return counts, cfg
+
+
+def _elapsed_from_anchor(index: pd.DatetimeIndex) -> np.ndarray:
+    return (index - TIME_ANCHOR).total_seconds().astype(np.float64)
+
+
+def _format_peak_interval(start_sec: float, end_sec: float) -> str:
+    """Human-readable interval for summary (prefer minutes when timeline is long)."""
+    if end_sec <= 300:
+        return f"{start_sec:.0f}-{end_sec:.0f} s"
+    return f"{start_sec / 60:.1f}-{end_sec / 60:.1f} min"
 
 
 def load_results(csv_path: Path) -> pd.DataFrame:
@@ -69,31 +153,54 @@ def plot_speed_histogram(df: pd.DataFrame, out_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_vehicles_per_minute(df: pd.DataFrame, out_path: Path) -> None:
+def plot_traffic_volume_timeline(df: pd.DataFrame, out_path: Path) -> VolumeBinConfig | None:
+    """
+    Bar chart of crossing counts per adaptive time window.
+
+    Returns the bin config used (for logging), or None if there was nothing to plot.
+    """
     if df.empty or "event_time" not in df.columns:
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
         fig.savefig(out_path, dpi=150)
         plt.close(fig)
-        return
+        return None
 
-    per_min = df.set_index("event_time").resample("1min").size()
-    per_min = per_min.rename("vehicles")
+    counts, cfg = crossing_counts_volume_timeline(df)
+    elapsed_sec = _elapsed_from_anchor(counts.index)
+    t_end = float(elapsed_sec[-1]) + cfg.window_seconds if len(elapsed_sec) else 0.0
+    use_minutes_axis = t_end > 240.0
+    scale = 60.0 if use_minutes_axis else 1.0
+    x_left = elapsed_sec / scale
+    bar_w = (cfg.window_seconds * 0.9) / scale
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    elapsed_min = (per_min.index - TIME_ANCHOR).total_seconds() / 60.0
-    x = np.asarray(elapsed_min, dtype=float)
-    ax.bar(x, per_min.values, width=0.9, align="center", color="teal", edgecolor="darkslategray")
-    ax.set_xlabel("Time from start of observation (minutes)")
-    ax.set_ylabel("Vehicles completing a crossing (per 1-minute window)")
+    ax.bar(
+        x_left,
+        counts.values,
+        width=bar_w,
+        align="edge",
+        color="teal",
+        edgecolor="darkslategray",
+    )
+    unit = "minutes" if use_minutes_axis else "seconds"
+    ax.set_xlabel(f"Time from start of observation ({unit})")
+    ax.set_ylabel(f"Vehicles completing a crossing (per {cfg.human_short} window)")
     ax.set_title("Traffic volume over the observation period")
-    step = max(1, len(x) // 24) if len(x) > 24 else 1
-    tick_idx = np.arange(0, len(x), step)
-    ax.set_xticks(x[tick_idx])
-    ax.set_xticklabels([f"{int(x[i])}" for i in tick_idx], rotation=45, ha="right")
+
+    n = len(x_left)
+    step = max(1, n // 24) if n > 24 else 1
+    tick_idx = np.arange(0, n, step)
+    ax.set_xticks(x_left[tick_idx])
+    if use_minutes_axis:
+        labels = [f"{x_left[i]:.1f}" for i in tick_idx]
+    else:
+        labels = [f"{int(round(x_left[i] * scale))}" for i in tick_idx]
+    ax.set_xticklabels(labels, rotation=45, ha="right")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+    return cfg
 
 
 def plot_entry_exit_heatmap(df: pd.DataFrame, out_path: Path) -> None:
@@ -193,11 +300,7 @@ def compute_summary(df: pd.DataFrame) -> str:
             lines.append(f"Busiest entry direction: {busiest}")
 
     if "entry_side" in df.columns and "exit_side" in df.columns:
-        route = (
-            df["entry_side"].astype(str)
-            + " -> "
-            + df["exit_side"].astype(str)
-        )
+        route = df["entry_side"].astype(str) + " -> " + df["exit_side"].astype(str)
         route_counts = route.value_counts()
         if not route_counts.empty:
             top = route_counts.index[0]
@@ -206,13 +309,19 @@ def compute_summary(df: pd.DataFrame) -> str:
             )
 
     if "event_time" in df.columns:
-        per_min = df.set_index("event_time").resample("1min").size()
-        if len(per_min) > 0 and per_min.sum() > 0:
-            peak_idx = per_min.idxmax()
-            peak_min = (peak_idx - TIME_ANCHOR).total_seconds() / 60.0
+        span = event_timestamp_span_seconds(df)
+        counts, cfg = crossing_counts_volume_timeline(df)
+        lines.append(
+            f"Crossing timestamp span: {span:.1f} s; volume timeline uses {cfg.human_short} bins."
+        )
+        if len(counts) > 0 and counts.sum() > 0:
+            peak_left = counts.idxmax()
+            start_sec = float((peak_left - TIME_ANCHOR).total_seconds())
+            end_sec = start_sec + cfg.window_seconds
+            interval = _format_peak_interval(start_sec, end_sec)
             lines.append(
-                f"Peak traffic minute: {int(peak_min)}-{int(peak_min) + 1} min from start "
-                f"({int(per_min.max())} vehicles)"
+                f"Peak traffic ({cfg.human_short} window): {interval} from start "
+                f"({int(counts.max())} vehicles)"
             )
 
     lines.append("=" * 50)
@@ -243,12 +352,19 @@ def main() -> None:
 
     # Figures (one function per figure; easy to comment out if needed)
     plot_speed_histogram(df, out_dir / "speed_distribution.png")
-    plot_vehicles_per_minute(df, out_dir / "vehicles_per_minute.png")
+    vol_cfg = plot_traffic_volume_timeline(df, out_dir / TRAFFIC_VOLUME_TIMELINE_FILENAME)
+    if vol_cfg is not None:
+        span = event_timestamp_span_seconds(df)
+        print(f"Volume timeline: {vol_cfg.human_short} bins (crossing timestamp span {span:.1f} s).")
+
+    legacy = out_dir / LEGACY_VOLUME_FILENAME
+    if legacy.exists():
+        legacy.unlink()
+
     plot_entry_exit_heatmap(df, out_dir / "entry_exit_flow_heatmap.png")
 
     wrote_class = plot_speed_by_class(df, out_dir / "speed_by_class.png")
     if not wrote_class:
-        # Remove stale file if present from a previous run with class data
         p = out_dir / "speed_by_class.png"
         if p.exists():
             p.unlink()

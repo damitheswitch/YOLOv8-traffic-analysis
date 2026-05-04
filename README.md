@@ -35,7 +35,7 @@ flowchart TB
 
 - **Annotated video:** There is **no default filename**. If you omit `--target_video_path`, nothing is saved to disk — you only get a live preview. If you pass `--target_video_path data/my_run.mov`, the file is created at exactly that path (any extension your OpenCV build supports for writing, for example `.mov` or `.mp4`).
 - **CSV:** Default is **`results.csv` in the current working directory** (again: the folder where your terminal was when you ran the command). Override with `--results_csv_path path/to/file.csv`.
-- **Charts / summary:** Produced only by `analyze.py`, default folder **`output/`** next to the CSV (override with `--out-dir`). Typical files: `speed_distribution.png`, `vehicles_per_minute.png`, `entry_exit_flow_heatmap.png`, `summary.txt`, and optionally `speed_by_class.png` if the CSV includes a vehicle-class column.
+- **Charts / summary:** Produced only by `analyze.py`, default folder **`output/`** next to the CSV (override with `--out-dir`). Typical files: `speed_distribution.png`, `traffic_volume_timeline.png` (adaptive time bins), `entry_exit_flow_heatmap.png`, `summary.txt`, and optionally `speed_by_class.png` if the CSV includes a vehicle-class column.
 
 **Typical first run:** install dependencies, download sample data (see below), then from the repo root run `main.py` with weights and video paths, then optionally `python analyze.py`.
 
@@ -47,7 +47,7 @@ flowchart TB
 4. **Congestion signal** — When the number of **unique** tracked vehicles inside any IN zone exceeds `--congestion_vehicle_threshold`, the UI marks **HIGH** congestion and adjusts IN-zone styling.
 5. **HUD** — On-screen totals for vehicles seen entering (**Total IN**) and those that completed at least one IN→OUT path (**Total OUT**).
 6. **CSV export** — After a run, writes per completed crossing: timestamp, tracker id, entry side, exit side, estimated speed (`--results_csv_path`, default `results.csv`).
-7. **Post-processing analysis** — Optional script `analyze.py` (pandas + matplotlib only, no YOLO) reads the CSV after a run and writes figures plus a text summary under `output/` for reporting or a thesis (speed histogram, vehicles per minute, entry-exit heatmap, optional speed-by-class chart if the CSV includes a class column).
+7. **Post-processing analysis** — Optional script `analyze.py` (pandas + matplotlib only, no YOLO) reads the CSV after a run and writes figures plus a text summary under `output/` for reporting or a thesis (speed histogram, traffic volume over time with **adaptive** bin width from crossing timestamps, entry-exit heatmap, optional speed-by-class chart if the CSV includes a class column).
 
 ## Repository layout
 
@@ -133,10 +133,10 @@ python analyze.py --csv path/to/results.csv --out-dir path/to/output
 | File | Description |
 |------|-------------|
 | `output/speed_distribution.png` | Histogram of estimated speed (km/h) with mean / median |
-| `output/vehicles_per_minute.png` | Crossing counts per 1-minute window vs. time from start |
+| `output/traffic_volume_timeline.png` | Crossing counts per time window vs. time from start; bin width adapts to crossing timestamp span (10 s … 1 min) |
 | `output/entry_exit_flow_heatmap.png` | 4×4 North/South/East/West origin-destination matrix |
 | `output/speed_by_class.png` | Only if the CSV has a class column (`vehicle_class`, `class_name`, `class`, or `yolo_class`) |
-| `output/summary.txt` | Totals, average speed, busiest entry, most common route, peak minute (also printed to the console) |
+| `output/summary.txt` | Totals, average speed, busiest entry, most common route, bin width used, peak window (also printed to the console) |
 
 ### CLI reference
 
