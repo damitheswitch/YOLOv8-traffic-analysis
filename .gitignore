@@ -1,0 +1,64 @@
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# ML / CV artifacts (large or regenerated)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.mlmodel
+*.mov
+*.mp4
+*.avi
+*.mkv
+*.webm
+
+# Local data and outputs (download with setup.sh / gdown; do not commit binaries)
+data/
+
+# Run outputs
+results.csv
+*_result.*
+runs/
+
+# Environment variables / secrets (if you add them later)
+.env
+.env.*
