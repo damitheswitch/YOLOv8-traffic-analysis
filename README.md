@@ -2,6 +2,43 @@
 
 This project analyzes traffic at a four-way intersection using **Ultralytics YOLOv8** for detection and **Supervision**’s **ByteTrack** integration for multi-object tracking. Processing lives under `video_processing/`.
 
+## Quick start: where to run, and what runs automatically
+
+**Where:** Open a terminal in the **repository root** — the folder that contains `main.py`, `analyze.py`, and `requirements.txt`. Paths you pass on the command line are usually relative to that folder (for example `data/traffic_analysis.mov`), or you can use absolute paths.
+
+**Two separate programs (this is the main source of confusion):**
+
+| Step | Command | What it does |
+|------|---------|----------------|
+| **1 — Pipeline** | `python main.py ...` | Runs YOLO + tracking on the video. Optionally **writes an annotated video file** if you pass `--target_video_path`. When processing **finishes** (full file, or you press `q` in preview mode), it **always writes the CSV** of completed crossings. |
+| **2 — Plots (optional)** | `python analyze.py ...` | Does **not** run automatically. Reads the CSV with pandas/matplotlib only and writes **charts and a text summary** under `output/`. Run this **after** step 1 when you want figures for a report or thesis. |
+
+`main.py` never imports or calls `analyze.py`. If you only run `main.py`, you get the video (if requested) and the CSV — no PNGs until you run `analyze.py`.
+
+```mermaid
+flowchart TB
+  subgraph step1 [Step 1: python main.py]
+    M[main.py → VideoProcessor]
+    M --> V{--target_video_path set?}
+    V -->|Yes| VID[Annotated video saved at the path you chose]
+    V -->|No| PRE[Preview window only — no video file on disk]
+    M --> CSV[CSV written when the frame loop ends]
+  end
+  subgraph step2 [Step 2: optional python analyze.py]
+    A[analyze.py reads CSV]
+    A --> OUT[output/*.png and output/summary.txt]
+  end
+  CSV --> A
+```
+
+**Output names (defaults and who chooses them):**
+
+- **Annotated video:** There is **no default filename**. If you omit `--target_video_path`, nothing is saved to disk — you only get a live preview. If you pass `--target_video_path data/my_run.mov`, the file is created at exactly that path (any extension your OpenCV build supports for writing, for example `.mov` or `.mp4`).
+- **CSV:** Default is **`results.csv` in the current working directory** (again: the folder where your terminal was when you ran the command). Override with `--results_csv_path path/to/file.csv`.
+- **Charts / summary:** Produced only by `analyze.py`, default folder **`output/`** next to the CSV (override with `--out-dir`). Typical files: `speed_distribution.png`, `vehicles_per_minute.png`, `entry_exit_flow_heatmap.png`, `summary.txt`, and optionally `speed_by_class.png` if the CSV includes a vehicle-class column.
+
+**Typical first run:** install dependencies, download sample data (see below), then from the repo root run `main.py` with weights and video paths, then optionally `python analyze.py`.
+
 ## What it does
 
 1. **Vehicle detection and tracking** — Bounding boxes colored per track; short motion **traces** behind each vehicle.
@@ -58,6 +95,8 @@ Place any other `.pt` / video paths you prefer; the CLI only needs valid file pa
 
 ## How to run
 
+All examples assume your **current working directory** is the repository root (the folder containing `main.py`).
+
 **Write an annotated video** (recommended for long clips):
 
 ```bash
@@ -73,11 +112,11 @@ python main.py ^
 
 On bash, use line continuation with `\` instead of `^`.
 
-**Preview in a window** (no output file): omit `--target_video_path`. Press `q` to stop; the CSV is still written at the end.
+**Preview in a window** (no output file): omit `--target_video_path`. Press `q` to stop early or let the video finish; in either case the CSV is written when the loop exits (implementation uses a `finally` block so normal completion and closing preview both flush the CSV).
 
 ### Post-processing (`analyze.py`)
 
-Run **after** the pipeline has produced `results.csv`. This script does not load YOLO or Supervision; it only uses **pandas** and **matplotlib**.
+This is a **second command**, not part of `main.py`. Run it **after** the pipeline has produced `results.csv` (or pass `--csv` to point at another file). It does not load YOLO or Supervision; it only uses **pandas** and **matplotlib**.
 
 ```bash
 python analyze.py

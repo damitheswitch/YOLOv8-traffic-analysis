@@ -62,3 +62,6 @@ runs/
 # Environment variables / secrets (if you add them later)
 .env
 .env.*
+
+#Docs / Monograph
+docs/TECHNICAL_MONOGRAPH.md
