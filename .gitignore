@@ -51,11 +51,12 @@ Desktop.ini
 *.mkv
 *.webm
 
-# Local data and outputs (download with setup.sh / gdown; do not commit binaries)
-data/
+# Local data (large binaries); keep data/README.md tracked
+data/*
+!data/README.md
 
-# Run outputs
-results.csv
+# Run outputs at repo root (regenerate with main.py)
+/results.csv
 *_result.*
 runs/
 
@@ -63,5 +64,9 @@ runs/
 .env
 .env.*
 
-#Docs / Monograph
-docs/TECHNICAL_MONOGRAPH.md
+# Thesis / Word artifacts (keep outside this repo)
+*.docx
+*.bak.docx
+thesis/
+thesis_format*
+thesis_format_extracted/

@@ -1,11 +1,11 @@
 Traffic analysis - results summary
 ==================================================
 Total vehicles (completed crossings): 18
-Average speed: 42.44 km/h
-Median speed: 42.06 km/h
-Speed std. dev.: 17.77 km/h
+Average speed: 42.83 km/h
+Median speed: 41.60 km/h
+Speed std. dev.: 8.34 km/h
 Busiest entry direction: West
 Most common route (entry to exit): West -> East (8 vehicles)
-Crossing timestamp span: 15.0 s; volume timeline uses 10 s bins.
+Crossing timestamp span: 13.8 s; volume timeline uses 10 s bins.
 Peak traffic (10 s window): 0-10 s from start (17 vehicles)
 ==================================================

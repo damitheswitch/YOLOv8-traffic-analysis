@@ -1,8 +1,7 @@
 gdown
-inference
 matplotlib
 opencv-python
 pandas
-supervision>=0.24.0
+supervision>=0.24.0,<0.26.0
 tqdm
 ultralytics

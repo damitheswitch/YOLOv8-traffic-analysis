@@ -37,7 +37,13 @@ flowchart TB
 - **CSV:** Default is **`results.csv` in the current working directory** (again: the folder where your terminal was when you ran the command). Override with `--results_csv_path path/to/file.csv`.
 - **Charts / summary:** Produced only by `analyze.py`, default folder **`output/`** next to the CSV (override with `--out-dir`). Typical files: `speed_distribution.png`, `traffic_volume_timeline.png` (adaptive time bins), `entry_exit_flow_heatmap.png`, `summary.txt`, and optionally `speed_by_class.png` if the CSV includes a vehicle-class column.
 
-**Typical first run:** install dependencies, download sample data (see below), then from the repo root run `main.py` with weights and video paths, then optionally `python analyze.py`.
+**Typical first run:** install dependencies, download sample data (see `data/README.md`), then from the repo root run `main.py` with weights and video paths, then optionally `python analyze.py`.
+
+**Quick figures without YOLO** (useful for demos or reports):
+
+```bash
+python analyze.py --csv sample/results.csv --out-dir output
+```
 
 ## What it does
 
@@ -51,17 +57,34 @@ flowchart TB
 
 ## Repository layout
 
+```
+YOLOv8-traffic-analysis/
+├── main.py                      # CLI: YOLO + tracking pipeline
+├── analyze.py                   # CLI: CSV → figures + summary
+├── requirements.txt
+├── setup.sh                     # Download sample video + weights into data/
+├── video_processing/            # Core detection, tracking, zones, CSV
+├── sample/
+│   └── results.csv              # Example pipeline output (18 crossings)
+├── output/                      # Generated figures (committed as demo samples)
+├── data/                        # Local video + weights (gitignored; see data/README.md)
+└── docs/
+    ├── DEFENSE_DEMO.md          # Step-by-step thesis defense script
+    ├── LIMITATIONS.md           # Scope boundaries to discuss with examiners
+    └── images/                  # Screenshots of the annotated UI
+```
+
 | Path | Role |
 |------|------|
 | `main.py` | CLI entrypoint |
 | `video_processing/video_processor.py` | YOLO inference, tracking, annotation, video sink or preview |
 | `video_processing/detections_manager.py` | Zone logic, speeds, trip completion, CSV writer |
 | `video_processing/utils.py` | Zone polygons, colors, zone labels |
-| `requirements.txt` | Python dependencies |
-| `analyze.py` | Post-process `results.csv`: plots + `summary.txt` in `output/` |
-| `setup.sh` | Bash script: creates `data/` and downloads sample video + weights via `gdown` |
+| `analyze.py` | Post-process CSV: plots + `summary.txt` in `output/` |
+| `sample/results.csv` | Bundled CSV so `analyze.py` works without running YOLO |
+| `docs/DEFENSE_DEMO.md` | Rehearsal checklist for thesis presentation |
 
-Intersection polygons in `utils.py` are hard-coded for the sample resolution; if you use another video, adjust those coordinates.
+Intersection polygons in `utils.py` are hard-coded for the sample resolution; if you use another video, adjust those coordinates. See `docs/LIMITATIONS.md` for other scope notes.
 
 ## Requirements
 
@@ -72,9 +95,11 @@ Intersection polygons in `utils.py` are hard-coded for the sample resolution; if
 pip install -r requirements.txt
 ```
 
-Dependencies include `ultralytics`, `supervision>=0.24.0`, `tqdm`, `gdown`, `inference`, `pandas`, and `matplotlib` (as listed in `requirements.txt`).
+Dependencies include `ultralytics`, `supervision`, `opencv-python`, `tqdm`, `gdown`, `pandas`, and `matplotlib` (see `requirements.txt`).
 
 ## Sample data (weights + video)
+
+See **`data/README.md`** for download instructions.
 
 **Linux / macOS / Git Bash on Windows:**
 
@@ -92,6 +117,12 @@ gdown -O "data/traffic_analysis.pt" "https://drive.google.com/uc?id=1y-IfToCjRXa
 ```
 
 Place any other `.pt` / video paths you prefer; the CLI only needs valid file paths.
+
+## Thesis defense
+
+- **Demo script:** [`docs/DEFENSE_DEMO.md`](docs/DEFENSE_DEMO.md) — full pipeline or fast CSV-only path.
+- **Limitations to mention:** [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+- **UI screenshots:** [`docs/images/`](docs/images/).
 
 ## How to run
 
