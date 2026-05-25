@@ -1,6 +1,7 @@
 gdown
 inference
 matplotlib
+opencv-python
 pandas
 supervision>=0.24.0
 tqdm
